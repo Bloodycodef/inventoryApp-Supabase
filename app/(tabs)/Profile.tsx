@@ -1,85 +1,159 @@
+import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Modal,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useUser } from "../../hook/useUser";
 import { supabase } from "../../lib/supabase";
 
-const COLORS = {
-  background: "#F4F7F9",
-  text: "#1F2937",
-  textSecondary: "#6B7280",
-  primary: "#007AFF",
-  danger: "#EF4444",
-  card: "#FFFFFF",
-};
-
-interface ProfileData {
+interface Profile {
   username: string;
-  email: string;
+  role: "admin" | "staf-gudang" | "staf-kasir";
   branch_name: string;
 }
 
-const Profile = () => {
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function ProfilePage() {
+  const { user, loading: authLoading } = useUser();
   const router = useRouter();
 
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [userLocation, setUserLocation] = useState<string | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newStaff, setNewStaff] = useState({
+    username: "",
+    password: "",
+    email: "",
+    role: "staf-gudang" as "staf-gudang" | "staf-kasir",
+  });
+
+  // ✅ Tambahkan fungsi logout di sini
+  const logout = async () => {
+    await supabase.auth.signOut();
+    router.replace("/auth/login");
+  };
+
+  // === FETCH PROFILE ===
   const fetchProfile = async () => {
     try {
-      setLoading(true);
+      if (!user) return;
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) throw userError || new Error("User not found");
-
-      // Ambil data user dari tabel app_users
-      const { data: userData, error: userDataError } = await supabase
+      const { data, error } = await supabase
         .from("app_users")
-        .select("username, email, branch_id")
-        .eq("user_id", user.id)
+        .select(
+          `
+          username,
+          role,
+          branch_id,
+          branches!inner(branch_name)
+        `
+        )
+        .eq("user_id", user.user_id)
         .single();
 
-      if (userDataError || !userData)
-        throw userDataError || new Error("User data not found");
+      if (error) throw error;
 
-      // Ambil nama cabang dari tabel branches
-      const { data: branch, error: branchError } = await supabase
-        .from("branches")
-        .select("branch_name")
-        .eq("branch_id", userData.branch_id)
-        .single(); // ⬅️ hanya ambil satu data, bukan array
-
-      if (branchError) throw branchError;
-
+      // ✅ Perbaikan akses branch_name
       setProfile({
-        username: userData.username,
-        email: userData.email,
-        branch_name: branch?.branch_name ?? "Tidak diketahui",
+        username: data.username,
+        role: data.role,
+        branch_name: (data.branches as { branch_name: string }).branch_name,
       });
-    } catch (error) {
-      console.error("Error fetching profile:", error);
+
+      fetchUserLocation();
+    } catch (err: any) {
+      console.error("Profile fetch error:", err);
+      Alert.alert("Error", err.message || "Gagal memuat profil");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+  // === GET USER LOCATION ===
+  const fetchUserLocation = async () => {
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission denied", "Tidak dapat mengakses lokasi");
+        return;
+      }
 
-  if (loading) {
+      const location = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = location.coords;
+      setUserLocation(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+    } catch (err) {
+      console.error("Error fetching location:", err);
+      setUserLocation("N/A");
+    }
+  };
+
+  // === ADD STAFF HANDLER ===
+  const handleAddStaff = async () => {
+    if (!newStaff.username || !newStaff.password || !newStaff.email) {
+      Alert.alert("Error", "Isi semua kolom terlebih dahulu");
+      return;
+    }
+
+    try {
+      if (!user) return;
+      setAdding(true);
+
+      const { data, error } = await supabase.auth.signUp({
+        email: newStaff.email,
+        password: newStaff.password,
+        options: {
+          data: {
+            display_name: newStaff.username,
+            role: newStaff.role,
+            branch_id: user.branch_id,
+            created_by: user.user_id,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      Alert.alert(
+        "Sukses",
+        "Akun staf berhasil dibuat! Silakan verifikasi email."
+      );
+      setModalVisible(false);
+      setNewStaff({
+        username: "",
+        password: "",
+        email: "",
+        role: "staf-gudang",
+      });
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Gagal menambah staf");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace("/auth/login");
+    } else if (user) {
+      fetchProfile();
+    }
+  }, [user, authLoading]);
+
+  if (loading || authLoading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Memuat profil...</Text>
+        <ActivityIndicator size="large" color="#1e3c72" />
+        <Text>Loading profile...</Text>
       </View>
     );
   }
@@ -87,103 +161,197 @@ const Profile = () => {
   if (!profile) {
     return (
       <View style={styles.center}>
-        <Text style={styles.errorText}>Data profil tidak ditemukan.</Text>
-        <TouchableOpacity
-          style={styles.buttonPrimary}
-          onPress={() => router.replace("/auth/login")}
-        >
-          <Text style={styles.buttonText}>Kembali ke Login</Text>
-        </TouchableOpacity>
+        <Text>Profil tidak ditemukan.</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Profil Pengguna</Text>
+    <ScrollView style={styles.container}>
+      <Text style={styles.header}>👤 Profil Pengguna</Text>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>Nama Pengguna:</Text>
+      <View style={styles.row}>
+        <Text style={styles.label}>Username:</Text>
         <Text style={styles.value}>{profile.username}</Text>
+      </View>
 
-        <Text style={styles.label}>Email:</Text>
-        <Text style={styles.value}>{profile.email}</Text>
+      <View style={styles.row}>
+        <Text style={styles.label}>Role:</Text>
+        <Text style={styles.value}>{profile.role}</Text>
+      </View>
 
+      <View style={styles.row}>
         <Text style={styles.label}>Cabang:</Text>
         <Text style={styles.value}>{profile.branch_name}</Text>
       </View>
 
-      <TouchableOpacity
-        style={styles.logoutButton}
-        onPress={async () => {
-          await supabase.auth.signOut();
-          router.replace("/auth/login");
-        }}
-      >
-        <Text style={styles.logoutText}>Keluar</Text>
-      </TouchableOpacity>
-    </View>
-  );
-};
+      <View style={styles.row}>
+        <Text style={styles.label}>Lokasi:</Text>
+        <Text style={styles.value}>{userLocation ?? "Loading..."}</Text>
+      </View>
 
-export default Profile;
+      {/* Tombol logout */}
+      <TouchableOpacity style={styles.button} onPress={logout}>
+        <Text style={styles.buttonText}>Logout</Text>
+      </TouchableOpacity>
+
+      {/* Tambah staf hanya untuk admin */}
+      {profile.role === "admin" && (
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: "#4CAF50" }]}
+          onPress={() => setModalVisible(true)}
+        >
+          <Text style={styles.buttonText}>Tambah Staf</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Modal Tambah Staf */}
+      <Modal visible={modalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Tambah Staf Baru</Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Username"
+              value={newStaff.username}
+              onChangeText={(text) =>
+                setNewStaff((prev) => ({ ...prev, username: text }))
+              }
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              keyboardType="email-address"
+              value={newStaff.email}
+              onChangeText={(text) =>
+                setNewStaff((prev) => ({ ...prev, email: text }))
+              }
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              secureTextEntry
+              value={newStaff.password}
+              onChangeText={(text) =>
+                setNewStaff((prev) => ({ ...prev, password: text }))
+              }
+            />
+
+            <View style={styles.roleSelect}>
+              <TouchableOpacity
+                style={[
+                  styles.roleButton,
+                  newStaff.role === "staf-gudang" && styles.roleButtonActive,
+                ]}
+                onPress={() =>
+                  setNewStaff((prev) => ({ ...prev, role: "staf-gudang" }))
+                }
+              >
+                <Text>Staf Gudang</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.roleButton,
+                  newStaff.role === "staf-kasir" && styles.roleButtonActive,
+                ]}
+                onPress={() =>
+                  setNewStaff((prev) => ({ ...prev, role: "staf-kasir" }))
+                }
+              >
+                <Text>Staf Kasir</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: "#4CAF50" }]}
+                onPress={handleAddStaff}
+                disabled={adding}
+              >
+                <Text style={styles.buttonText}>
+                  {adding ? "Menambah..." : "Tambah"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: "#aaa" }]}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.buttonText}>Batal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </ScrollView>
+  );
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    padding: 20,
+  container: { flex: 1, padding: 16, backgroundColor: "#f5f5f5" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  header: { fontSize: 20, fontWeight: "bold", marginBottom: 20 },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
-  center: {
+  label: { fontWeight: "bold", fontSize: 16 },
+  value: { fontSize: 16 },
+  button: {
+    marginTop: 20,
+    backgroundColor: "#1e3c72",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  buttonText: { color: "white", fontWeight: "bold", fontSize: 16 },
+  modalOverlay: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: COLORS.background,
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
-  loadingText: { marginTop: 10, fontSize: 16, color: COLORS.textSecondary },
-  errorText: {
-    fontSize: 16,
-    color: COLORS.danger,
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: COLORS.text,
-    marginBottom: 20,
-  },
-  card: {
-    backgroundColor: COLORS.card,
+  modalContainer: {
+    backgroundColor: "white",
     borderRadius: 12,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    padding: 20,
+    width: "85%",
   },
-  label: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginTop: 8,
+  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
   },
-  value: {
-    fontSize: 16,
-    color: COLORS.text,
-    fontWeight: "500",
+  roleSelect: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginVertical: 10,
   },
-  buttonPrimary: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
+  roleButton: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 6,
+    padding: 8,
+    flex: 1,
+    alignItems: "center",
+    marginHorizontal: 5,
   },
-  buttonText: { color: "white", fontWeight: "bold", fontSize: 16 },
-  logoutButton: {
-    marginTop: 30,
-    backgroundColor: COLORS.danger,
-    paddingVertical: 12,
-    borderRadius: 8,
+  roleButtonActive: {
+    backgroundColor: "#d1e7dd",
+    borderColor: "#4CAF50",
   },
-  logoutText: { color: "white", textAlign: "center", fontWeight: "bold" },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 15,
+  },
 });
