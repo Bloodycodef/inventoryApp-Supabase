@@ -9,13 +9,23 @@ import {
 import { COLORS } from "../../constans/Color";
 
 export function InlineItemEditForm({ item, onSave, onCancel }: any) {
-  const [itemName, setItemName] = useState(item.item_name);
-  const [description, setDescription] = useState(item.description || "");
-  const [stock, setStock] = useState(String(item.stock || "0"));
+  const [itemName, setItemName] = useState(item?.item_name || "");
+  const [description, setDescription] = useState(item?.description || "");
+  const [stock, setStock] = useState(String(item?.stock ?? "0"));
   const [purchasePrice, setPurchasePrice] = useState(
-    String(item.purchase_price)
+    String(item?.purchase_price ?? "0")
   );
-  const [sellingPrice, setSellingPrice] = useState(String(item.selling_price));
+  const [sellingPrice, setSellingPrice] = useState(
+    String(item?.selling_price ?? "0")
+  );
+
+  const handleCancel = () => {
+    if (typeof onCancel === "function") {
+      onCancel();
+    } else {
+      console.warn("onCancel tidak dikirim dari parent component");
+    }
+  };
 
   return (
     <View>
@@ -85,7 +95,7 @@ export function InlineItemEditForm({ item, onSave, onCancel }: any) {
         <Text style={styles.saveText}>Simpan Perubahan</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+      <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
         <Text style={styles.cancelText}>Batal</Text>
       </TouchableOpacity>
     </View>

@@ -1,12 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
-
-interface LowStockItem {
-  item_id: string;
-  item_name: string;
-  stock: number;
-}
+import { LowStockItem } from "../type/database";
 
 interface LowStockListProps {
   items: LowStockItem[];
