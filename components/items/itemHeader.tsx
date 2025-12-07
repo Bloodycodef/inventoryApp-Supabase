@@ -1,13 +1,7 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Text, View } from "react-native";
 import { COLORS } from "../../constans/Color";
 
-export function ItemHeader({
-  itemsLength,
-  isAdmin,
-  isFormVisible,
-  setIsFormVisible,
-}: any) {
+export function ItemHeader({ itemsLength }: any) {
   return (
     <View
       style={{
@@ -23,18 +17,6 @@ export function ItemHeader({
       <Text style={{ fontSize: 20, fontWeight: "bold" }}>
         📄 Daftar Item ({itemsLength})
       </Text>
-
-      {isAdmin && (
-        <TouchableOpacity onPress={() => setIsFormVisible(!isFormVisible)}>
-          <MaterialCommunityIcons
-            name={
-              isFormVisible ? "close-circle-outline" : "plus-circle-outline"
-            }
-            size={26}
-            color={isFormVisible ? COLORS.danger : COLORS.primary}
-          />
-        </TouchableOpacity>
-      )}
     </View>
   );
 }

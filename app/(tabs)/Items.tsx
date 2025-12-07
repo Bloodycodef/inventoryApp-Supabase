@@ -6,9 +6,11 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  TouchableOpacity,
   View,
 } from "react-native";
 
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { InlineItemEditForm } from "../../components/items/InlineItemEditForm";
 import { ItemCard } from "../../components/items/itemCard";
@@ -47,7 +49,6 @@ export default function ItemPage() {
     await fetchItems();
   }, []);
 
-  // CREATE ITEM
   const handleSubmit = async () => {
     const { itemName, purchasePrice, sellingPrice, description, stock } =
       inputs;
@@ -78,7 +79,6 @@ export default function ItemPage() {
     Alert.alert("Berhasil", "Item berhasil ditambahkan!");
   };
 
-  // DELETE ITEM
   const handleDelete = async (item: any) => {
     Alert.alert("Konfirmasi", `Hapus item "${item.item_name}"?`, [
       { text: "Batal" },
@@ -102,73 +102,99 @@ export default function ItemPage() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={{ flex: 1 }}
+      pointerEvents="box-none"
     >
-      <ItemHeader
-        itemsLength={items.length}
-        isAdmin={isAdmin}
-        isFormVisible={isFormVisible}
-        setIsFormVisible={setIsFormVisible}
-      />
+      <View style={{ flex: 1 }}>
+        <ItemHeader itemsLength={items.length} />
 
-      {isAdmin && isFormVisible && (
-        <ItemForm
-          {...inputs}
-          {...Object.fromEntries(
-            Object.keys(inputs).map((k) => [
-              `set${k[0].toUpperCase() + k.slice(1)}`,
-              (v: any) => setInputs((s) => ({ ...s, [k]: v })),
-            ])
-          )}
-          handleSubmit={handleSubmit}
-        />
-      )}
-
-      {/* LIST ITEM */}
-      <FlatList
-        data={items}
-        keyExtractor={(item) => String(item.item_id)}
-        contentContainerStyle={{ padding: 20 }}
-        onRefresh={handleRefresh}
-        refreshing={false}
-        renderItem={({ item }) => (
-          <ItemCard
-            item={item}
-            onEdit={() => setEditItem(item)} // buka modal edit
-            onDelete={() => handleDelete(item)}
-          />
-        )}
-      />
-
-      {/* EDIT MODAL */}
-      <Modal visible={!!editItem} animationType="slide" transparent>
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.3)",
-            justifyContent: "center",
-            padding: 20,
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: COLORS.card,
-              padding: 20,
-              borderRadius: 14,
-            }}
-          >
-            <InlineItemEditForm
-              item={editItem}
-              onCancel={() => setEditItem(null)}
-              onSave={async (updated: any) => {
-                await handleUpdateItem(editItem.item_id, updated);
-                setEditItem(null);
-              }}
+        {isAdmin && isFormVisible && (
+          <View style={{ padding: 20 }}>
+            <ItemForm
+              {...inputs}
+              {...Object.fromEntries(
+                Object.keys(inputs).map((k) => [
+                  `set${k[0].toUpperCase() + k.slice(1)}`,
+                  (v: any) => setInputs((s) => ({ ...s, [k]: v })),
+                ])
+              )}
+              handleSubmit={handleSubmit}
             />
           </View>
-        </View>
-      </Modal>
+        )}
+
+        <FlatList
+          data={items}
+          keyExtractor={(item) => String(item.item_id)}
+          contentContainerStyle={{
+            padding: 20,
+            paddingBottom: 100,
+          }}
+          onRefresh={handleRefresh}
+          refreshing={false}
+          renderItem={({ item }) => (
+            <ItemCard
+              item={item}
+              onEdit={() => setEditItem(item)}
+              onDelete={() => handleDelete(item)}
+            />
+          )}
+        />
+
+        <Modal visible={!!editItem} animationType="slide" transparent>
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.3)",
+              justifyContent: "center",
+              padding: 20,
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: COLORS.card,
+                padding: 20,
+                borderRadius: 14,
+              }}
+            >
+              <InlineItemEditForm
+                item={editItem}
+                onCancel={() => setEditItem(null)}
+                onSave={async (updated: any) => {
+                  await handleUpdateItem(editItem.item_id, updated);
+                  setEditItem(null);
+                }}
+              />
+            </View>
+          </View>
+        </Modal>
+      </View>
+
+      {/* FLOATING BUTTON DI BAWAH */}
+      {isAdmin && (
+        <TouchableOpacity
+          onPress={() => setIsFormVisible(!isFormVisible)}
+          style={{
+            position: "absolute",
+            bottom: 30,
+            right: 30,
+            backgroundColor: COLORS.primary,
+            width: 60,
+            height: 60,
+            borderRadius: 30,
+            justifyContent: "center",
+            alignItems: "center",
+            elevation: 6,
+          }}
+        >
+          <MaterialCommunityIcons
+            name={isFormVisible ? "close" : "plus"}
+            size={32}
+            color="#fff"
+          />
+        </TouchableOpacity>
+      )}
     </KeyboardAvoidingView>
   );
 }

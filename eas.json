@@ -2,20 +2,18 @@
   "build": {
     "preview": {
       "android": {
-        "buildType": "apk",
-        "npm": {
-          "runScripts": false,
-          "ciFlags": "--legacy-peer-deps"
-        }
+        "buildType": "apk"
+      },
+      "cache": {
+        "disabled": true
       }
     },
     "production": {
       "android": {
-        "buildType": "app-bundle",
-        "npm": {
-          "runScripts": false,
-          "ciFlags": "--legacy-peer-deps"
-        }
+        "buildType": "app-bundle"
+      },
+      "cache": {
+        "disabled": true
       }
     }
   }

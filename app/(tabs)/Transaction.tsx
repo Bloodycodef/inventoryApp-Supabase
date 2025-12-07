@@ -197,6 +197,8 @@ export default function TransactionPage() {
   return (
     <ScrollView
       style={styles.container}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ paddingBottom: 50 }}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
@@ -244,20 +246,27 @@ export default function TransactionPage() {
         </Text>
 
         <Text style={styles.label}>Pilih Barang:</Text>
-        <RNPickerSelect
-          onValueChange={(value) => setSelectedItem(value)}
-          value={selectedItem}
-          items={items.map((item) => ({
-            label: `${item.item_name} (stok: ${item.stock})`,
-            value: item.item_id,
-          }))}
-          placeholder={{ label: "Pilih barang...", value: null }}
-          style={{
-            inputIOS: styles.dropdown,
-            inputAndroid: styles.dropdown,
-            placeholder: { color: "#94a3b8" },
-          }}
-        />
+
+        <View style={{ marginTop: 6 }}>
+          <RNPickerSelect
+            onValueChange={(value) => setSelectedItem(value)}
+            value={selectedItem}
+            useNativeAndroidPickerStyle={false}
+            items={items.map((item) => ({
+              label: `${item.item_name} (stok: ${item.stock})`,
+              value: item.item_id,
+            }))}
+            placeholder={{ label: "Pilih barang...", value: null }}
+            style={{
+              inputIOS: {
+                ...styles.dropdown,
+                paddingVertical: 15,
+              },
+              inputAndroid: styles.dropdown,
+              placeholder: { color: "#94a3b8" },
+            }}
+          />
+        </View>
 
         <Text style={styles.label}>Jumlah:</Text>
         <TextInput
