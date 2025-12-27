@@ -1,6 +1,5 @@
-// hook/useUser.ts
+import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
 
 export function useUser() {
   const [user, setUser] = useState<any>(null);
@@ -9,7 +8,10 @@ export function useUser() {
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.auth.getUser();
-      if (!data.user) return setLoading(false);
+      if (!data.user) {
+        setLoading(false);
+        return;
+      }
 
       const { data: userData } = await supabase
         .from("app_users")
@@ -17,9 +19,13 @@ export function useUser() {
         .eq("user_id", data.user.id)
         .single();
 
-      setUser(userData);
+      setUser({
+        ...userData,
+        user_id: data.user.id,
+      });
       setLoading(false);
     };
+
     load();
   }, []);
 

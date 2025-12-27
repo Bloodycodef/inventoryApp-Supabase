@@ -1,35 +1,35 @@
+// app/components/dashboard/ChartReport.tsx
 import React from "react";
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { LineChart } from "react-native-chart-kit";
-import { ChartReportProps } from "../type/database";
-
+import { ChartReportProps } from "../../type/home";
 const COLORS = {
   text: "#1F2937",
-  success: "#22C55E", // Hijau
-  danger: "#EF4444", // Merah
+  success: "#22C55E",
+  danger: "#EF4444",
   card: "#FFFFFF",
   graphLabel: "#6B7280",
 };
 
-export default function ChartReport({
+export const ChartReport: React.FC<ChartReportProps> = ({
   labels,
   barangMasuk,
   barangKeluar,
-}: ChartReportProps) {
+}) => {
   const { width } = useWindowDimensions();
-  const chartWidth = width - 40 - 32; // padding total dari parent
+  const chartWidth = width - 40 - 32;
 
   const data = {
     labels,
     datasets: [
       {
         data: barangMasuk,
-        color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`, // hijau
+        color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
         strokeWidth: 3,
       },
       {
         data: barangKeluar,
-        color: (opacity = 1) => `rgba(239, 68, 68, ${opacity})`, // merah
+        color: (opacity = 1) => `rgba(239, 68, 68, ${opacity})`,
         strokeWidth: 3,
       },
     ],
@@ -53,17 +53,14 @@ export default function ChartReport({
             strokeWidth: "2",
           },
           propsForBackgroundLines: {
-            strokeDasharray: "", // garis solid
+            strokeDasharray: "",
             stroke: "#EEE",
           },
         }}
         bezier
-        style={{
-          borderRadius: 8,
-        }}
+        style={{ borderRadius: 8 }}
       />
 
-      {/* Legend manual */}
       <View style={styles.legendContainer}>
         <View style={styles.legendItem}>
           <View
@@ -80,7 +77,7 @@ export default function ChartReport({
       </View>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   card: {

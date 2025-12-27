@@ -1,22 +1,38 @@
+// app/components/dashboard/TransactionList.tsx
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
-import { Transaction } from "../type/database";
+import { Transaction } from "../../type/database";
 
 interface TransactionListProps {
   transactions: Transaction[];
+  title?: string;
+  emptyMessage?: string;
+  limit?: number;
 }
 
-export default function TransactionList({
+export const TransactionList: React.FC<TransactionListProps> = ({
   transactions,
-}: TransactionListProps) {
-  if (transactions.length === 0) return null;
+  title = "🧾 Transaksi Terbaru",
+  emptyMessage = "Belum ada transaksi",
+  limit = 10,
+}) => {
+  const displayTransactions = transactions.slice(0, limit);
+
+  if (displayTransactions.length === 0) {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.emptyMessage}>{emptyMessage}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>🧾 Transaksi Terbaru</Text>
+      <Text style={styles.title}>{title}</Text>
       <FlatList
-        data={transactions}
+        data={displayTransactions}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.row}>
@@ -51,10 +67,11 @@ export default function TransactionList({
           </View>
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
+        scrollEnabled={false}
       />
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   card: {
@@ -69,6 +86,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#1F2937",
     marginBottom: 12,
+  },
+  emptyMessage: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    paddingVertical: 20,
   },
   row: {
     flexDirection: "row",

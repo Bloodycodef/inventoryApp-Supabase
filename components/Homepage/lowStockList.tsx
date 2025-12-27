@@ -1,21 +1,35 @@
+// app/components/dashboard/LowStockList.tsx
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
-import { LowStockItem } from "../type/database";
+import { LowStockItem } from "../../type/database";
 
 interface LowStockListProps {
   items: LowStockItem[];
+  title?: string;
+  emptyMessage?: string;
 }
 
-export default function LowStockList({ items }: LowStockListProps) {
-  if (items.length === 0) return null;
+export const LowStockList: React.FC<LowStockListProps> = ({
+  items,
+  title = "⚠️ Stok Rendah",
+  emptyMessage = "Tidak ada stok rendah",
+}) => {
+  if (items.length === 0) {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.emptyMessage}>{emptyMessage}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>⚠️ Stok Rendah</Text>
+      <Text style={styles.title}>{title}</Text>
       <FlatList
         data={items}
-        keyExtractor={(item) => item.item_id.toString()}
+        keyExtractor={(item) => item.item_id}
         renderItem={({ item }) => (
           <View style={styles.row}>
             <MaterialCommunityIcons
@@ -28,10 +42,11 @@ export default function LowStockList({ items }: LowStockListProps) {
           </View>
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
+        scrollEnabled={false}
       />
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   card: {
@@ -46,6 +61,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#1F2937",
     marginBottom: 12,
+  },
+  emptyMessage: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    paddingVertical: 20,
   },
   row: {
     flexDirection: "row",

@@ -1,3 +1,5 @@
+// app/transaction/index.tsx
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -7,46 +9,55 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import RNPickerSelect from "react-native-picker-select";
-import { useUser } from "../../hook/useUser";
-import { supabase } from "../../lib/supabase";
-
-// ✅ tambahkan purchase_price & selling_price di interface Item
-interface Item {
-  item_id: string;
-  item_name: string;
-  stock: number;
-  purchase_price: number;
-  selling_price: number;
-}
-
-interface Transaction {
-  transaction_id: string;
-  item_id: string;
-  quantity: number;
-  transaction_type: "IN" | "OUT";
-  transaction_date: string;
-  username: string;
-  item_name: string;
-  price?: number; // ✅ tambahkan agar bisa menampilkan harga bila perlu
-}
+import { Cart } from "../../components/transaction/chart";
+import { NotesModal } from "../../components/transaction/notesModal";
+import { TransactionForm } from "../../components/transaction/transactionForm";
+import { TransactionHistory } from "../../components/transaction/transactionHistory";
+import { useUser } from "../../hook/transaction/useUser";
+import { CartItem, Item, TransactionGroup } from "../../type/transaction";
+import { generateInvoice } from "../../utils/transaction/pdfGenerator";
+import {
+  fetchItems,
+  fetchTransactionGroups,
+  submitTransaction,
+} from "../../utils/transaction/transactionService";
 
 export default function TransactionPage() {
   const { user, loading: authLoading } = useUser();
   const router = useRouter();
 
+  // State Management
   const [items, setItems] = useState<Item[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactionGroups, setTransactionGroups] = useState<
+    TransactionGroup[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Cart State
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [totalAmount, setTotalAmount] = useState(0);
+
+  // Form State
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [quantity, setQuantity] = useState<string>("");
   const [type, setType] = useState<"IN" | "OUT">("IN");
+  const [isServiceMode, setIsServiceMode] = useState(false);
+  const [serviceName, setServiceName] = useState("");
+  const [servicePrice, setServicePrice] = useState("");
+  const [notes, setNotes] = useState("");
+
+  // Modal State
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // ============================================
+  // EFFECTS & INITIALIZATION
+  // ============================================
 
   useEffect(() => {
     if (user?.role === "staf-kasir") setType("OUT");
@@ -54,60 +65,10 @@ export default function TransactionPage() {
       setType("IN");
   }, [user]);
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      if (!user) return;
-
-      // ✅ ambil juga purchase_price dan selling_price
-      const { data: itemData, error: itemError } = await supabase
-        .from("items")
-        .select("item_id, item_name, stock, purchase_price, selling_price")
-        .eq("branch_id", user.branch_id)
-        .order("item_name", { ascending: true });
-
-      if (itemError) throw itemError;
-      setItems(itemData || []);
-
-      // Ambil daftar transaksi (tidak perlu ubah)
-      const { data: txData, error: txError } = await supabase
-        .from("transactions")
-        .select(
-          `
-          transaction_id,
-          item_id,
-          quantity,
-          transaction_type,
-          transaction_date,
-          price,
-          app_users(username),
-          items(item_name)
-        `
-        )
-        .eq("branch_id", user.branch_id)
-        .order("transaction_date", { ascending: false });
-
-      if (txError) throw txError;
-
-      const formattedTx: Transaction[] = (txData || []).map((t: any) => ({
-        transaction_id: t.transaction_id,
-        item_id: t.item_id,
-        quantity: t.quantity,
-        transaction_type: t.transaction_type,
-        transaction_date: t.transaction_date,
-        username: t.app_users?.username || "Unknown",
-        item_name: t.items?.item_name || "Unknown",
-        price: t.price,
-      }));
-
-      setTransactions(formattedTx);
-    } catch (err) {
-      console.error("Error fetching transactions:", err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  useEffect(() => {
+    const total = cart.reduce((sum, item) => sum + item.subtotal, 0);
+    setTotalAmount(total);
+  }, [cart]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -117,304 +78,562 @@ export default function TransactionPage() {
     }
   }, [user, authLoading]);
 
+  // ============================================
+  // DATA FETCHING FUNCTIONS
+  // ============================================
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      if (!user) return;
+
+      const [itemData, groupData] = await Promise.all([
+        fetchItems(user.branch_id),
+        fetchTransactionGroups(user.branch_id),
+      ]);
+
+      setItems(itemData);
+      setTransactionGroups(groupData);
+    } catch (err) {
+      console.error("Error in fetchData:", err);
+      Alert.alert("Error", "Gagal memuat data. Periksa koneksi internet Anda.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchData();
   }, []);
 
-  const handleSubmit = async () => {
-    if (!user) return;
-    if (!selectedItem || !quantity)
-      return Alert.alert("Error", "Pilih item dan masukkan quantity");
+  // ============================================
+  // CART MANAGEMENT FUNCTIONS
+  // ============================================
+
+  const addServiceToCart = () => {
+    if (!serviceName.trim() || !servicePrice) {
+      Alert.alert("Error", "Masukkan nama jasa dan harga");
+      return;
+    }
+
+    const priceNumber = Number(servicePrice);
+    if (isNaN(priceNumber) || priceNumber <= 0) {
+      Alert.alert("Error", "Harga harus angka dan lebih dari 0");
+      return;
+    }
+
+    const quantity = 1;
+    const subtotal = priceNumber * quantity;
+
+    const newServiceItem: CartItem = {
+      name: serviceName,
+      quantity: quantity,
+      price: priceNumber,
+      subtotal: subtotal,
+      is_service: true,
+      description: serviceName,
+    };
+
+    setCart([...cart, newServiceItem]);
+    setServiceName("");
+    setServicePrice("");
+    setIsServiceMode(false);
+    Alert.alert("Sukses", "Jasa ditambahkan ke keranjang");
+  };
+
+  const addItemToCart = () => {
+    if (!selectedItem || !quantity) {
+      Alert.alert("Error", "Pilih item dan masukkan jumlah");
+      return;
+    }
 
     const qtyNumber = Number(quantity);
-    if (qtyNumber <= 0)
-      return Alert.alert("Error", "Quantity harus lebih dari 0");
+    if (isNaN(qtyNumber) || qtyNumber <= 0) {
+      Alert.alert("Error", "Jumlah harus angka dan lebih dari 0");
+      return;
+    }
 
     const item = items.find((i) => i.item_id === selectedItem);
-    if (!item) return Alert.alert("Error", "Item tidak ditemukan");
+    if (!item) {
+      Alert.alert("Error", "Item tidak ditemukan");
+      return;
+    }
 
-    if (type === "IN" && user.role !== "staf-gudang" && user.role !== "admin")
-      return Alert.alert(
-        "Error",
-        "Hanya staf gudang/admin yang bisa input barang masuk"
+    // Check stock for OUT transactions
+    if (type === "OUT") {
+      const cartQuantity = cart.reduce(
+        (sum, cartItem) =>
+          cartItem.item_id === selectedItem ? sum + cartItem.quantity : sum,
+        0
       );
 
-    if (type === "OUT" && user.role !== "staf-kasir" && user.role !== "admin")
-      return Alert.alert(
-        "Error",
-        "Hanya staf kasir/admin yang bisa input barang keluar"
-      );
+      if (qtyNumber + cartQuantity > item.stock) {
+        Alert.alert("Error", `Stok tidak cukup. Stok tersedia: ${item.stock}`);
+        return;
+      }
+    }
 
-    if (type === "OUT" && qtyNumber > item.stock)
-      return Alert.alert("Error", `Stok tidak cukup (${item.stock})`);
-
-    // ✅ ambil harga sesuai tipe transaksi
     const price = type === "IN" ? item.purchase_price : item.selling_price;
+    const subtotal = qtyNumber * price;
 
-    try {
-      // ✅ sertakan price ke insert Supabase
-      const { error } = await supabase.from("transactions").insert({
+    const existingIndex = cart.findIndex(
+      (cartItem) => cartItem.item_id === selectedItem && !cartItem.is_service
+    );
+
+    if (existingIndex >= 0) {
+      const updatedCart = [...cart];
+      updatedCart[existingIndex].quantity += qtyNumber;
+      updatedCart[existingIndex].subtotal += subtotal;
+      setCart(updatedCart);
+    } else {
+      const newCartItem: CartItem = {
         item_id: selectedItem,
+        name: item.item_name,
         quantity: qtyNumber,
-        transaction_type: type,
-        branch_id: user.branch_id,
-        user_id: user.user_id,
-        price, // ✅ wajib dikirim agar tidak null
-      });
+        price: price,
+        subtotal: subtotal,
+        is_service: false,
+      };
+      setCart([...cart, newCartItem]);
+    }
 
-      if (error) throw error;
+    setSelectedItem(null);
+    setQuantity("");
+    Alert.alert("Sukses", "Item ditambahkan ke keranjang");
+  };
 
-      // Update stok barang
-      const newStock =
-        type === "IN" ? item.stock + qtyNumber : item.stock - qtyNumber;
-
-      await supabase
-        .from("items")
-        .update({ stock: newStock })
-        .eq("item_id", selectedItem);
-
-      Alert.alert(
-        "Sukses",
-        `Transaksi ${type === "IN" ? "masuk" : "keluar"} berhasil`
-      );
-      setQuantity("");
-      setSelectedItem(null);
-      fetchData();
-    } catch (err: any) {
-      Alert.alert("Error", err.message || "Gagal menyimpan transaksi");
+  const addToCart = () => {
+    if (isServiceMode) {
+      addServiceToCart();
+    } else {
+      addItemToCart();
     }
   };
 
-  if (loading || authLoading)
+  const removeFromCart = (index: number) => {
+    const updatedCart = [...cart];
+    updatedCart.splice(index, 1);
+    setCart(updatedCart);
+  };
+
+  const updateCartItemQuantity = (index: number, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      removeFromCart(index);
+      return;
+    }
+
+    const updatedCart = [...cart];
+    const item = updatedCart[index];
+
+    // Check stock if it's an item (not service)
+    if (!item.is_service && item.item_id) {
+      const originalItem = items.find((i) => i.item_id === item.item_id);
+      if (originalItem && type === "OUT" && newQuantity > originalItem.stock) {
+        Alert.alert(
+          "Error",
+          `Stok tidak cukup. Maksimal: ${originalItem.stock}`
+        );
+        return;
+      }
+    }
+
+    updatedCart[index].quantity = newQuantity;
+    updatedCart[index].subtotal = newQuantity * item.price;
+    setCart(updatedCart);
+  };
+
+  const clearCart = () => {
+    setCart([]);
+    setTotalAmount(0);
+    setNotes("");
+    setIsServiceMode(false);
+  };
+
+  // ============================================
+  // TRANSACTION PROCESSING
+  // ============================================
+
+  const handleSubmitTransaction = async () => {
+    if (!user) return;
+
+    if (cart.length === 0) {
+      Alert.alert("Error", "Keranjang kosong. Tambahkan item terlebih dahulu.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      const newGroup = await submitTransaction(
+        user,
+        type,
+        cart,
+        totalAmount,
+        notes,
+        items
+      );
+
+      // Show success message with option to download invoice
+      Alert.alert(
+        "Sukses",
+        `Transaksi ${type === "IN" ? "masuk" : "keluar"} berhasil disimpan`,
+        [
+          {
+            text: "Download Nota",
+            onPress: async () => {
+              setIsGeneratingPDF(true);
+              const result = await generateInvoice(newGroup);
+              setIsGeneratingPDF(false);
+              if (result.success) {
+                Alert.alert("Sukses", result.message);
+              } else {
+                Alert.alert("Error", result.message);
+              }
+              clearCart();
+              fetchData();
+            },
+          },
+          {
+            text: "OK",
+            onPress: () => {
+              clearCart();
+              fetchData();
+            },
+          },
+        ]
+      );
+    } catch (err: any) {
+      console.error("Transaction error details:", err);
+      Alert.alert(
+        "Error",
+        err.message ||
+          "Gagal menyimpan transaksi. Pastikan koneksi internet stabil."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGenerateInvoice = async (group: TransactionGroup) => {
+    setIsGeneratingPDF(true);
+    const result = await generateInvoice(group);
+    setIsGeneratingPDF(false);
+
+    if (result.success) {
+      Alert.alert("Sukses", result.message);
+    } else {
+      Alert.alert("Error", result.message);
+    }
+  };
+
+  // ============================================
+  // RENDER LOADING
+  // ============================================
+
+  if (loading || authLoading) {
     return (
-      <View style={styles.center}>
+      <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
-        <Text>Loading...</Text>
+        <Text style={styles.loadingText}>Memuat data...</Text>
       </View>
     );
+  }
+
+  // ============================================
+  // RENDER MAIN UI
+  // ============================================
 
   return (
     <ScrollView
       style={styles.container}
-      keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ paddingBottom: 50 }}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      <Text style={styles.title}>📦 Sistem Inventory</Text>
-      <Text style={styles.subtitle}>Kelola stok barang masuk & keluar</Text>
-
-      <Text style={styles.roleText}>
-        Login sebagai: <Text style={{ fontWeight: "bold" }}>{user.role}</Text>
-      </Text>
-
-      {/* Tabs IN/OUT */}
+      {/* Transaction Type Tabs */}
       <View style={styles.tabContainer}>
-        {(user.role === "staf-gudang" || user.role === "admin") && (
+        {(user?.role === "staf-gudang" || user?.role === "admin") && (
           <TouchableOpacity
             style={[styles.tabButton, type === "IN" && styles.tabActiveGreen]}
-            onPress={() => setType("IN")}
+            onPress={() => {
+              setType("IN");
+              clearCart();
+              setIsServiceMode(false);
+            }}
           >
             <Text
               style={[styles.tabText, type === "IN" && styles.tabTextActive]}
             >
-              Barang Masuk
+              <Ionicons name="arrow-down" size={16} /> Stok Masuk
             </Text>
           </TouchableOpacity>
         )}
 
-        {(user.role === "staf-kasir" || user.role === "admin") && (
+        {(user?.role === "staf-kasir" || user?.role === "admin") && (
           <TouchableOpacity
             style={[styles.tabButton, type === "OUT" && styles.tabActiveRed]}
-            onPress={() => setType("OUT")}
+            onPress={() => {
+              setType("OUT");
+              clearCart();
+            }}
           >
             <Text
               style={[styles.tabText, type === "OUT" && styles.tabTextActive]}
             >
-              Barang Keluar
+              <Ionicons name="arrow-up" size={16} /> Penjualan
             </Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Form Input */}
+      {/* Cart Summary */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>
-          {type === "IN" ? "Input Barang Masuk" : "Input Barang Keluar"}
-        </Text>
-
-        <Text style={styles.label}>Pilih Barang:</Text>
-
-        <View style={{ marginTop: 6 }}>
-          <RNPickerSelect
-            onValueChange={(value) => setSelectedItem(value)}
-            value={selectedItem}
-            useNativeAndroidPickerStyle={false}
-            items={items.map((item) => ({
-              label: `${item.item_name} (stok: ${item.stock})`,
-              value: item.item_id,
-            }))}
-            placeholder={{ label: "Pilih barang...", value: null }}
-            style={{
-              inputIOS: {
-                ...styles.dropdown,
-                paddingVertical: 15,
-              },
-              inputAndroid: styles.dropdown,
-              placeholder: { color: "#94a3b8" },
-            }}
-          />
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>
+            <Ionicons name="cart" size={20} /> Keranjang Transaksi
+          </Text>
+          <View style={styles.cartBadge}>
+            <Text style={styles.cartBadgeText}>{cart.length} item</Text>
+          </View>
         </View>
 
-        <Text style={styles.label}>Jumlah:</Text>
-        <TextInput
-          style={styles.input}
-          keyboardType="numeric"
-          placeholder="Masukkan jumlah..."
-          value={quantity}
-          onChangeText={setQuantity}
+        <Cart
+          cart={cart}
+          totalAmount={totalAmount}
+          onUpdateQuantity={updateCartItemQuantity}
+          onRemoveItem={removeFromCart}
+          onClearCart={clearCart}
+          onSubmitTransaction={handleSubmitTransaction}
+          isSubmitting={isSubmitting}
+          type={type}
         />
+      </View>
+
+      {/* Notes Section */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>
+          <Ionicons name="document-text" size={18} /> Catatan Transaksi
+        </Text>
 
         <TouchableOpacity
-          style={[
-            styles.submitButton,
-            type === "IN" ? styles.btnGreen : styles.btnRed,
-          ]}
-          onPress={handleSubmit}
+          style={styles.notesInput}
+          onPress={() => setShowNotesModal(true)}
         >
-          <Text style={styles.submitText}>
-            {type === "IN" ? "Simpan Barang Masuk" : "Simpan Barang Keluar"}
+          <Text style={notes ? styles.notesText : styles.notesPlaceholder}>
+            {notes || "Tambahkan catatan transaksi (opsional)..."}
           </Text>
+          <Ionicons name="create-outline" size={16} color="#64748b" />
         </TouchableOpacity>
       </View>
 
-      {/* Riwayat Transaksi */}
-      <Text style={styles.sectionTitle}>📜 Riwayat Transaksi</Text>
-      {transactions.length === 0 ? (
-        <Text style={{ color: "#64748b", textAlign: "center" }}>
-          Belum ada transaksi.
+      {/* Add Item/Service Form */}
+      <TransactionForm
+        items={items}
+        selectedItem={selectedItem}
+        setSelectedItem={setSelectedItem}
+        quantity={quantity}
+        setQuantity={setQuantity}
+        type={type}
+        isServiceMode={isServiceMode}
+        setIsServiceMode={setIsServiceMode}
+        serviceName={serviceName}
+        setServiceName={setServiceName}
+        servicePrice={servicePrice}
+        setServicePrice={setServicePrice}
+        onAddToCart={addToCart}
+      />
+
+      {/* Transaction History */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          <Ionicons name="time" size={20} /> Riwayat Transaksi
         </Text>
-      ) : (
-        transactions.map((tx) => (
-          <View
-            key={tx.transaction_id}
-            style={[
-              styles.txCard,
-              tx.transaction_type === "IN" ? styles.txGreen : styles.txRed,
-            ]}
-          >
-            <View style={styles.txRow}>
-              <Text style={styles.txType}>
-                {tx.transaction_type === "IN" ? "⬆️ Masuk" : "⬇️ Keluar"}
-              </Text>
-              <Text style={styles.txDate}>
-                {new Date(tx.transaction_date).toLocaleDateString()}
-              </Text>
-            </View>
-            <Text style={styles.txName}>{tx.item_name}</Text>
-            <View style={styles.txRow}>
-              <Text style={styles.txQty}>Jumlah: {tx.quantity}</Text>
-              {tx.price && (
-                <Text style={styles.txQty}>
-                  Harga: Rp {tx.price.toLocaleString()}
-                </Text>
-              )}
-            </View>
-            <Text style={styles.txUser}>By: {tx.username}</Text>
-          </View>
-        ))
-      )}
+        <TouchableOpacity onPress={onRefresh}>
+          <Ionicons name="refresh" size={20} color="#3b82f6" />
+        </TouchableOpacity>
+      </View>
+
+      <TransactionHistory
+        transactionGroups={transactionGroups}
+        onRefresh={onRefresh}
+        onGenerateInvoice={handleGenerateInvoice}
+        isGeneratingPDF={isGeneratingPDF}
+      />
+
+      {/* Notes Modal */}
+      <NotesModal
+        visible={showNotesModal}
+        onClose={() => setShowNotesModal(false)}
+        notes={notes}
+        setNotes={setNotes}
+      />
     </ScrollView>
   );
 }
 
+// ============================================
+// STYLES
+// ============================================
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc", padding: 16 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  title: { fontSize: 24, fontWeight: "bold", color: "#1e293b" },
-  subtitle: { fontSize: 14, color: "#64748b", marginBottom: 16 },
-  roleText: { marginBottom: 8, color: "#64748b" },
-  tabContainer: { flexDirection: "row", gap: 8, marginBottom: 16 },
+  // Container
+  container: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+  },
+  loadingText: {
+    marginTop: 12,
+    color: "#64748b",
+    fontSize: 16,
+  },
+
+  // Header
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 16,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#1e293b",
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#64748b",
+    marginBottom: 8,
+  },
+  roleText: {
+    fontSize: 13,
+    color: "#475569",
+  },
+
+  // Tabs
+  tabContainer: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
   tabButton: {
     flex: 1,
-    backgroundColor: "#fff",
-    paddingVertical: 10,
+    backgroundColor: "#f1f5f9",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 10,
     alignItems: "center",
-    elevation: 2,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
   },
-  tabActiveGreen: { backgroundColor: "#16a34a" },
-  tabActiveRed: { backgroundColor: "#dc2626" },
-  tabText: { color: "#475569", fontWeight: "600" },
-  tabTextActive: { color: "white" },
+  tabActiveGreen: {
+    backgroundColor: "#16a34a",
+  },
+  tabActiveRed: {
+    backgroundColor: "#dc2626",
+  },
+  tabText: {
+    color: "#475569",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  tabTextActive: {
+    color: "white",
+  },
+
+  // Cards
   card: {
     backgroundColor: "white",
+    marginHorizontal: 16,
+    marginVertical: 8,
     padding: 16,
     borderRadius: 12,
-    elevation: 3,
-    marginBottom: 24,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
   },
   cardTitle: {
-    fontWeight: "bold",
     fontSize: 18,
+    fontWeight: "bold",
     color: "#1e293b",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  cartBadge: {
+    backgroundColor: "#e2e8f0",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  cartBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#475569",
+  },
+
+  // Notes
+  notesInput: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    padding: 12,
+    backgroundColor: "#f8fafc",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    minHeight: 50,
+  },
+  notesText: {
+    flex: 1,
+    color: "#0f172a",
+    fontSize: 14,
+  },
+  notesPlaceholder: {
+    flex: 1,
+    color: "#94a3b8",
+    fontSize: 14,
+  },
+
+  // Transaction History
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 24,
     marginBottom: 12,
   },
-  label: { fontWeight: "600", color: "#334155", marginTop: 8 },
-  dropdown: {
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    backgroundColor: "#f8fafc",
-    marginTop: 6,
-    color: "#0f172a",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
-    padding: 10,
-    marginTop: 6,
-    backgroundColor: "#f8fafc",
-  },
-  submitButton: {
-    marginTop: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  btnGreen: { backgroundColor: "#16a34a" },
-  btnRed: { backgroundColor: "#dc2626" },
-  submitText: { color: "white", fontWeight: "bold", fontSize: 16 },
   sectionTitle: {
+    fontSize: 20,
     fontWeight: "bold",
-    fontSize: 18,
     color: "#1e293b",
-    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
-  txCard: {
-    backgroundColor: "white",
-    borderLeftWidth: 4,
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 10,
-    elevation: 2,
-  },
-  txGreen: { borderLeftColor: "#16a34a" },
-  txRed: { borderLeftColor: "#dc2626" },
-  txRow: { flexDirection: "row", justifyContent: "space-between" },
-  txType: { fontWeight: "600", color: "#475569" },
-  txDate: { color: "#94a3b8" },
-  txName: {
-    fontWeight: "bold",
-    fontSize: 16,
-    color: "#0f172a",
-    marginVertical: 4,
-  },
-  txQty: { color: "#334155" },
-  txUser: { color: "#64748b" },
 });

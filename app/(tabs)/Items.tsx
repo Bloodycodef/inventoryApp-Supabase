@@ -1,200 +1,190 @@
+// app/items/index.tsx
 import React, { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
-  FlatList,
   KeyboardAvoidingView,
-  Modal,
   Platform,
-  TouchableOpacity,
+  StyleSheet,
   View,
 } from "react-native";
-
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import { InlineItemEditForm } from "../../components/items/InlineItemEditForm";
-import { ItemCard } from "../../components/items/itemCard";
-import { ItemForm } from "../../components/items/itemForm";
-import { ItemHeader } from "../../components/items/itemHeader";
-import { COLORS } from "../../constans/Color";
-import { useItems } from "../../hook/useItem";
+import { EditItemModal } from "../../components/items/editItemModel";
+import { ItemFormSection } from "../../components/items/itemFormSection";
+import { ItemList } from "../../components/items/itemList";
+import { AccessWarning } from "../../components/shared/accessWarning";
+import { EmptyState } from "../../components/shared/empetyState";
+import { FloatingButton } from "../../components/shared/floatingButton";
+import { Loading } from "../../components/shared/loading";
+import { useItems } from "../../hook/items/useitem";
+import { Item, ItemFormData } from "../../type/item";
 
 export default function ItemPage() {
-  const navigation: any = useNavigation();
-
   const {
     items,
     loading,
+    user,
+    fetchItems,
     handleCreateItem,
     handleUpdateItem,
     handleDeleteItem,
-    fetchItems,
-    user,
   } = useItems();
 
   const isAdmin = user?.role === "admin";
-
+  const [refreshing, setRefreshing] = useState(false);
   const [isFormVisible, setIsFormVisible] = useState(false);
-  const [editItem, setEditItem] = useState<any>(null);
-
-  const [inputs, setInputs] = useState({
-    itemName: "",
+  const [editItem, setEditItem] = useState<Item | null>(null);
+  const [formData, setFormData] = useState<ItemFormData>({
+    item_name: "",
     description: "",
     stock: "",
-    purchasePrice: "",
-    sellingPrice: "",
+    purchase_price: "",
+    selling_price: "",
   });
 
+  // Debug: Cek apakah user admin
+  console.log("User Role:", user?.role);
+  console.log("Is Admin:", isAdmin);
+  console.log("User Data:", user);
+
   const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
     await fetchItems();
-  }, []);
+    setRefreshing(false);
+  }, [fetchItems]);
+
+  const handleFormChange = (key: keyof ItemFormData, value: string) => {
+    setFormData((prev) => ({ ...prev, [key]: value }));
+  };
 
   const handleSubmit = async () => {
-    const { itemName, purchasePrice, sellingPrice, description, stock } =
-      inputs;
+    try {
+      await handleCreateItem({
+        item_name: formData.item_name,
+        description: formData.description,
+        stock: Number(formData.stock || 0),
+        purchase_price: Number(formData.purchase_price),
+        selling_price: Number(formData.selling_price),
+      });
 
-    if (!itemName || !purchasePrice || !sellingPrice)
-      return Alert.alert(
-        "Gagal",
-        "Nama, Harga Beli, dan Harga Jual wajib diisi."
-      );
+      setFormData({
+        item_name: "",
+        description: "",
+        stock: "",
+        purchase_price: "",
+        selling_price: "",
+      });
 
-    await handleCreateItem({
-      item_name: itemName,
-      description,
-      stock: Number(stock || 0),
-      purchase_price: Number(purchasePrice),
-      selling_price: Number(sellingPrice),
-    });
-
-    setInputs({
-      itemName: "",
-      description: "",
-      stock: "",
-      purchasePrice: "",
-      sellingPrice: "",
-    });
-
-    setIsFormVisible(false);
-    Alert.alert("Berhasil", "Item berhasil ditambahkan!");
+      setIsFormVisible(false);
+      Alert.alert("Berhasil", "Item berhasil ditambahkan!");
+    } catch (error: any) {
+      Alert.alert("Gagal", error.message || "Terjadi kesalahan");
+    }
   };
 
-  const handleDelete = async (item: any) => {
-    Alert.alert("Konfirmasi", `Hapus item "${item.item_name}"?`, [
-      { text: "Batal" },
-      {
-        text: "Hapus",
-        style: "destructive",
-        onPress: async () => {
-          await handleDeleteItem(item.item_id);
-          Alert.alert("Berhasil", "Item berhasil dihapus.");
+  const handleDelete = async (item: Item) => {
+    if (!isAdmin) {
+      Alert.alert("Akses Ditolak", "Hanya admin yang bisa menghapus item");
+      return;
+    }
+
+    Alert.alert(
+      "Konfirmasi Hapus",
+      `Apakah Anda yakin ingin menghapus item "${item.item_name}"?\n\nTindakan ini tidak dapat dibatalkan dan akan mempengaruhi data transaksi terkait.`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await handleDeleteItem(item.item_id);
+              Alert.alert("Berhasil", "Item berhasil dihapus.");
+            } catch (error: any) {
+              Alert.alert("Gagal", error.message || "Gagal menghapus item");
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
-  if (loading)
-    return (
-      <View style={{ flex: 1, justifyContent: "center" }}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
+  const handleEdit = (item: Item) => {
+    if (!isAdmin) {
+      Alert.alert("Akses Ditolak", "Hanya admin yang bisa mengedit item");
+      return;
+    }
+    setEditItem(item);
+  };
+
+  const handleSaveEdit = async (updates: any) => {
+    try {
+      if (!editItem) return;
+      await handleUpdateItem(editItem.item_id, updates);
+      Alert.alert("Berhasil", "Item berhasil diperbarui");
+    } catch (error: any) {
+      Alert.alert("Gagal", error.message || "Gagal mengupdate item");
+      throw error;
+    }
+  };
+
+  if (loading) {
+    return <Loading message="Memuat data..." />;
+  }
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={{ flex: 1 }}
-      pointerEvents="box-none"
+      style={styles.container}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
     >
-      <View style={{ flex: 1 }}>
-        <ItemHeader itemsLength={items.length} />
+      <View style={styles.content}>
+        <AccessWarning isAdmin={isAdmin} />
 
-        {isAdmin && isFormVisible && (
-          <View style={{ padding: 20 }}>
-            <ItemForm
-              {...inputs}
-              {...Object.fromEntries(
-                Object.keys(inputs).map((k) => [
-                  `set${k[0].toUpperCase() + k.slice(1)}`,
-                  (v: any) => setInputs((s) => ({ ...s, [k]: v })),
-                ])
-              )}
-              handleSubmit={handleSubmit}
-            />
-          </View>
-        )}
-
-        <FlatList
-          data={items}
-          keyExtractor={(item) => String(item.item_id)}
-          contentContainerStyle={{
-            padding: 20,
-            paddingBottom: 100,
-          }}
-          onRefresh={handleRefresh}
-          refreshing={false}
-          renderItem={({ item }) => (
-            <ItemCard
-              item={item}
-              onEdit={() => setEditItem(item)}
-              onDelete={() => handleDelete(item)}
-            />
-          )}
+        <ItemFormSection
+          isVisible={isFormVisible}
+          formData={formData}
+          onClose={() => setIsFormVisible(false)}
+          onFormChange={handleFormChange}
+          onSubmit={handleSubmit}
         />
 
-        <Modal visible={!!editItem} animationType="slide" transparent>
-          <View
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(0,0,0,0.3)",
-              justifyContent: "center",
-              padding: 20,
-            }}
-          >
-            <View
-              style={{
-                backgroundColor: COLORS.card,
-                padding: 20,
-                borderRadius: 14,
-              }}
-            >
-              <InlineItemEditForm
-                item={editItem}
-                onCancel={() => setEditItem(null)}
-                onSave={async (updated: any) => {
-                  await handleUpdateItem(editItem.item_id, updated);
-                  setEditItem(null);
-                }}
-              />
-            </View>
-          </View>
-        </Modal>
+        {items.length === 0 ? (
+          <EmptyState isAdmin={isAdmin} />
+        ) : (
+          <ItemList
+            items={items}
+            isAdmin={isAdmin}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            onEditItem={handleEdit}
+            onDeleteItem={handleDelete}
+          />
+        )}
+
+        <EditItemModal
+          visible={!!editItem}
+          item={editItem}
+          onClose={() => setEditItem(null)}
+          onSave={handleSaveEdit}
+        />
       </View>
 
-      {/* FLOATING BUTTON DI BAWAH */}
+      {/* Floating Button - harus di luar View utama agar position: absolute berfungsi */}
       {isAdmin && (
-        <TouchableOpacity
+        <FloatingButton
+          isVisible={isFormVisible}
           onPress={() => setIsFormVisible(!isFormVisible)}
-          style={{
-            position: "absolute",
-            bottom: 30,
-            right: 30,
-            backgroundColor: COLORS.primary,
-            width: 60,
-            height: 60,
-            borderRadius: 30,
-            justifyContent: "center",
-            alignItems: "center",
-            elevation: 6,
-          }}
-        >
-          <MaterialCommunityIcons
-            name={isFormVisible ? "close" : "plus"}
-            size={32}
-            color="#fff"
-          />
-        </TouchableOpacity>
+        />
       )}
     </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+  },
+  content: {
+    flex: 1,
+  },
+});
