@@ -87,7 +87,6 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
           {/* ===== BODY (SCROLLABLE) ===== */}
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : undefined}
-            style={{ flex: 1 }}
           >
             <ScrollView
               contentContainerStyle={styles.modalBody}
@@ -174,17 +173,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
-    padding: 16,
+    padding: 20,
   },
   modalContainer: {
     backgroundColor: "#fff",
-    borderRadius: 20,
+    borderRadius: 12,
     maxHeight: "90%",
     overflow: "hidden",
-    flex: 1,
+    alignSelf: "stretch",
   },
   modalHeader: {
-    padding: 16,
+    padding: 10,
     borderBottomWidth: 1,
     borderColor: "#E5E7EB",
     flexDirection: "row",
@@ -199,16 +198,16 @@ const styles = StyleSheet.create({
     paddingBottom: 40, // ⬅️ penting biar tombol tidak ketutup
   },
   formGroup: {
-    marginBottom: 16,
+    marginBottom: 5,
   },
   label: {
     fontWeight: "600",
-    marginBottom: 6,
+    marginBottom: 2,
   },
   priceRow: {
     flexDirection: "row",
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 15,
   },
   priceGroup: {
     flex: 1,

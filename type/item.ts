@@ -4,6 +4,7 @@ export interface Item {
   item_name: string;
   description?: string;
   stock: number;
+  category?: string;
   purchase_price: number;
   selling_price: number;
   branch_id?: string;

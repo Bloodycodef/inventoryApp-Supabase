@@ -1,5 +1,5 @@
-// app/items/components/FloatingButton.tsx
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+// components/shared/floatingButton.tsx (jika ada)
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, TouchableOpacity } from "react-native";
 
@@ -12,20 +12,13 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
   isVisible,
   onPress,
 }) => {
-  // Tombol harus selalu muncul jika user adalah admin
-  // isVisible hanya untuk mengubah icon
-
   return (
     <TouchableOpacity
+      style={styles.floatingButton}
       onPress={onPress}
-      style={[styles.floatingButton, isVisible && styles.floatingButtonActive]}
-      activeOpacity={0.7}
+      activeOpacity={0.8}
     >
-      <MaterialCommunityIcons
-        name={isVisible ? "close" : "plus"}
-        size={28}
-        color="#FFFFFF"
-      />
+      <Ionicons name={isVisible ? "close" : "add"} size={28} color="white" />
     </TouchableOpacity>
   );
 };
@@ -33,23 +26,18 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
 const styles = StyleSheet.create({
   floatingButton: {
     position: "absolute",
-    bottom: 30,
-    right: 20,
-    backgroundColor: "#3B82F6",
+    bottom: 24,
+    right: 24,
     width: 56,
     height: 56,
     borderRadius: 28,
+    backgroundColor: "#3B82F6",
     justifyContent: "center",
     alignItems: "center",
     elevation: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    zIndex: 1000, // Pastikan tombol di atas komponen lain
-  },
-  floatingButtonActive: {
-    backgroundColor: "#DC2626",
-    transform: [{ rotate: "45deg" }],
+    shadowRadius: 4,
   },
 });

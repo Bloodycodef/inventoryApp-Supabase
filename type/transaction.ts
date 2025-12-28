@@ -3,7 +3,9 @@ export interface Item {
   item_id: string;
   item_name: string;
   stock: number;
+  category?: string;
   purchase_price: number;
+  price: string;
   selling_price: number;
 }
 

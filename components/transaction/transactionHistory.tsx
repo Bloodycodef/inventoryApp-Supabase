@@ -1,5 +1,6 @@
-// app/transaction/components/TransactionHistory.tsx
+// app/transaction/components/TransactionHistory.tsx (bagian atas file, tambahkan import dan props)
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
@@ -23,6 +24,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   onGenerateInvoice,
   isGeneratingPDF,
 }) => {
+  const router = useRouter();
+
   if (transactionGroups.length === 0) {
     return (
       <View style={styles.emptyHistory}>
@@ -34,7 +37,20 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
   return (
     <>
-      {transactionGroups.map((group) => (
+      {/* Header dengan tombol Lihat Semua */}
+      <View style={styles.historyHeader}>
+        <Text style={styles.historyTitle}>Transaksi Terbaru</Text>
+        <TouchableOpacity
+          style={styles.viewAllButton}
+          onPress={() => router.push("/transaction/all-transaction")}
+        >
+          <Text style={styles.viewAllText}>Lihat Semua</Text>
+          <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Daftar transaksi (batasi hanya 5 terbaru) */}
+      {transactionGroups.slice(0, 5).map((group) => (
         <View
           key={group.group_id}
           style={[
@@ -42,6 +58,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             group.transaction_type === "IN" ? styles.cardIn : styles.cardOut,
           ]}
         >
+          {/* ... (kode transaksi card yang sudah ada) ... */}
           <View style={styles.transactionHeader}>
             <View style={styles.transactionInfo}>
               <View style={styles.typeBadge}>
@@ -53,7 +70,6 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                 {new Date(group.transaction_date).toLocaleDateString("id-ID", {
                   day: "numeric",
                   month: "short",
-                  year: "numeric",
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
@@ -118,12 +134,65 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           </View>
         </View>
       ))}
+
+      {/* Tampilkan indikator jika ada lebih dari 5 transaksi */}
+      {transactionGroups.length > 5 && (
+        <TouchableOpacity
+          style={styles.moreTransactions}
+          onPress={() => router.push("/transaction/all-transaction")}
+        >
+          <Text style={styles.moreTransactionsText}>
+            Lihat {transactionGroups.length - 5} transaksi lainnya
+          </Text>
+          <Ionicons name="arrow-forward" size={16} color="#3B82F6" />
+        </TouchableOpacity>
+      )}
     </>
   );
 };
 
 const styles = StyleSheet.create({
-  // Copy relevant styles from original file
+  // Tambahkan style baru
+  historyHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  historyTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1E293B",
+  },
+  viewAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: "#3B82F6",
+    fontWeight: "500",
+  },
+  moreTransactions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    backgroundColor: "#F1F5F9",
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 12,
+    gap: 8,
+  },
+  moreTransactionsText: {
+    fontSize: 14,
+    color: "#3B82F6",
+    fontWeight: "500",
+  },
+
+  // Style yang sudah ada (dari kode asli)...
   emptyHistory: {
     alignItems: "center",
     paddingVertical: 40,

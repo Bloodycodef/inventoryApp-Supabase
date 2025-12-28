@@ -3,12 +3,12 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import { LowStockList } from "../../components/Homepage/lowStockList";
+import { StatsSection } from "../../components/Homepage/statSection";
 import { TransactionList } from "../../components/Homepage/transactionList";
 import { Button } from "../../components/shared/button";
 import { ChartSection } from "../../components/shared/charSection";
 import { Container } from "../../components/shared/container";
 import { Loading } from "../../components/shared/loading";
-import { StatsSection } from "../../components/shared/statSection";
 import { Text } from "../../components/shared/text";
 import { useDashboardData } from "../../hook/dashboardh/useDashboardData";
 

@@ -1,5 +1,6 @@
 // app/transaction/index.tsx
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -78,6 +79,13 @@ export default function TransactionPage() {
     }
   }, [user, authLoading]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        fetchData();
+      }
+    }, [user])
+  );
   // ============================================
   // DATA FETCHING FUNCTIONS
   // ============================================
@@ -447,15 +455,6 @@ export default function TransactionPage() {
       />
 
       {/* Transaction History */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>
-          <Ionicons name="time" size={20} /> Riwayat Transaksi
-        </Text>
-        <TouchableOpacity onPress={onRefresh}>
-          <Ionicons name="refresh" size={20} color="#3b82f6" />
-        </TouchableOpacity>
-      </View>
-
       <TransactionHistory
         transactionGroups={transactionGroups}
         onRefresh={onRefresh}

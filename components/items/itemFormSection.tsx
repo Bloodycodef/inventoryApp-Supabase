@@ -1,51 +1,64 @@
-// app/items/components/ItemFormSection.tsx - Perbaikan styling
+// components/items/AddItemModal.tsx
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React from "react";
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Button } from "../../components/shared/button";
-import { Input } from "../../components/shared/input";
+import React, { useState } from "react";
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { ItemFormData } from "../../type/item";
+import { Input } from "../shared/input";
 
-interface ItemFormSectionProps {
-  isVisible: boolean;
-  formData: ItemFormData;
+interface AddItemModalProps {
+  visible: boolean;
   onClose: () => void;
-  onFormChange: (key: keyof ItemFormData, value: string) => void;
-  onSubmit: () => void;
+  onSubmit: (data: ItemFormData) => Promise<void>;
 }
 
-export const ItemFormSection: React.FC<ItemFormSectionProps> = ({
-  isVisible,
-  formData,
+export const AddItemModal: React.FC<AddItemModalProps> = ({
+  visible,
   onClose,
-  onFormChange,
   onSubmit,
 }) => {
-  if (!isVisible) return null;
+  const [formData, setFormData] = useState<ItemFormData>({
+    item_name: "",
+    description: "",
+    stock: "",
+    purchase_price: "",
+    selling_price: "",
+  });
+
+  const [loading, setLoading] = useState(false);
+  const { height: screenHeight } = useWindowDimensions();
+
+  const handleFormChange = (key: keyof ItemFormData, value: string) => {
+    setFormData((prev) => ({ ...prev, [key]: value }));
+  };
 
   const validateForm = (): boolean => {
-    if (
-      !formData.item_name ||
-      !formData.purchase_price ||
-      !formData.selling_price
-    ) {
-      Alert.alert("Error", "Nama, Harga Beli, dan Harga Jual wajib diisi.");
+    if (!formData.item_name.trim()) {
+      Alert.alert("Error", "Nama item harus diisi");
+      return false;
+    }
+
+    if (!formData.selling_price || Number(formData.selling_price) <= 0) {
+      Alert.alert("Error", "Harga jual harus diisi dan lebih dari 0");
       return false;
     }
 
     if (
-      isNaN(Number(formData.purchase_price)) ||
-      Number(formData.purchase_price) <= 0
+      formData.purchase_price &&
+      (isNaN(Number(formData.purchase_price)) ||
+        Number(formData.purchase_price) < 0)
     ) {
       Alert.alert("Error", "Harga beli harus angka positif");
-      return false;
-    }
-
-    if (
-      isNaN(Number(formData.selling_price)) ||
-      Number(formData.selling_price) <= 0
-    ) {
-      Alert.alert("Error", "Harga jual harus angka positif");
       return false;
     }
 
@@ -60,149 +73,240 @@ export const ItemFormSection: React.FC<ItemFormSectionProps> = ({
     return true;
   };
 
-  const handleSubmit = () => {
-    if (validateForm()) {
-      onSubmit();
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
+
+    try {
+      setLoading(true);
+      await onSubmit({
+        item_name: formData.item_name.trim(),
+        description: formData.description.trim(),
+        stock: formData.stock || "0",
+        purchase_price: formData.purchase_price || "0",
+        selling_price: formData.selling_price,
+      });
+
+      // Reset form setelah sukses
+      setFormData({
+        item_name: "",
+        description: "",
+        stock: "",
+        purchase_price: "",
+        selling_price: "",
+      });
+
+      onClose();
+    } catch (error: any) {
+      Alert.alert("Gagal", error.message || "Terjadi kesalahan");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <View style={styles.formContainer}>
-      <View style={styles.formHeader}>
-        <View style={styles.formTitleContainer}>
-          <MaterialCommunityIcons
-            name="plus-circle"
-            size={24}
-            color="#3B82F6"
-          />
-          <Text style={styles.formTitle}>Tambah Item Baru</Text>
-        </View>
-        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-          <MaterialCommunityIcons name="close" size={24} color="#6B7280" />
-        </TouchableOpacity>
-      </View>
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardAvoidingView}
+        >
+          <View
+            style={[styles.modalContainer, { maxHeight: screenHeight * 0.8 }]}
+          >
+            {/* ===== HEADER ===== */}
+            <View style={styles.modalHeader}>
+              <View style={styles.titleContainer}>
+                <MaterialCommunityIcons
+                  name="plus-circle"
+                  size={24}
+                  color="#3B82F6"
+                />
+                <Text style={styles.modalTitle}>Tambah Item Baru</Text>
+              </View>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <MaterialCommunityIcons
+                  name="close"
+                  size={24}
+                  color="#64748b"
+                />
+              </TouchableOpacity>
+            </View>
 
-      <View style={styles.formContent}>
-        <Input
-          placeholder="Nama Item *"
-          value={formData.item_name}
-          onChangeText={(text) => onFormChange("item_name", text)}
-          variant="filled"
-          style={styles.input}
-        />
+            {/* ===== BODY (SCROLLABLE) ===== */}
+            <ScrollView
+              contentContainerStyle={styles.modalBody}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              style={styles.scrollView}
+            >
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Nama Item *</Text>
+                <Input
+                  placeholder="Masukkan nama item"
+                  value={formData.item_name}
+                  onChangeText={(text) => handleFormChange("item_name", text)}
+                />
+              </View>
 
-        <Input
-          placeholder="Deskripsi (opsional)"
-          value={formData.description}
-          onChangeText={(text) => onFormChange("description", text)}
-          multiline
-          numberOfLines={3}
-          variant="filled"
-          style={styles.input}
-        />
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Deskripsi (opsional)</Text>
+                <Input
+                  placeholder="Masukkan deskripsi"
+                  multiline
+                  numberOfLines={3}
+                  style={styles.textArea}
+                  value={formData.description}
+                  onChangeText={(text) => handleFormChange("description", text)}
+                />
+              </View>
 
-        <Input
-          placeholder="Stok (opsional)"
-          value={formData.stock}
-          onChangeText={(text) => onFormChange("stock", text)}
-          keyboardType="numeric"
-          variant="filled"
-          style={styles.input}
-        />
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Stok (opsional)</Text>
+                <Input
+                  placeholder="Masukkan stok"
+                  keyboardType="numeric"
+                  value={formData.stock}
+                  onChangeText={(text) => handleFormChange("stock", text)}
+                />
+              </View>
 
-        <View style={styles.priceRow}>
-          <View style={styles.priceInput}>
-            <Input
-              placeholder="Harga Beli *"
-              value={formData.purchase_price}
-              onChangeText={(text) => onFormChange("purchase_price", text)}
-              keyboardType="numeric"
-              variant="filled"
-            />
+              <View style={styles.priceRow}>
+                <View style={styles.priceGroup}>
+                  <Text style={styles.label}>Harga Beli (opsional)</Text>
+                  <Input
+                    placeholder="Masukkan harga beli"
+                    keyboardType="numeric"
+                    value={formData.purchase_price}
+                    onChangeText={(text) =>
+                      handleFormChange("purchase_price", text)
+                    }
+                  />
+                </View>
+
+                <View style={styles.priceGroup}>
+                  <Text style={styles.label}>Harga Jual *</Text>
+                  <Input
+                    placeholder="Masukkan harga jual"
+                    keyboardType="numeric"
+                    value={formData.selling_price}
+                    onChangeText={(text) =>
+                      handleFormChange("selling_price", text)
+                    }
+                  />
+                </View>
+              </View>
+
+              {/* ===== BUTTON ===== */}
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  loading && styles.submitButtonDisabled,
+                ]}
+                onPress={handleSubmit}
+                disabled={loading}
+              >
+                <Text style={styles.submitButtonText}>
+                  {loading ? "Menyimpan..." : "Tambah Item"}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
-          <View style={styles.priceInput}>
-            <Input
-              placeholder="Harga Jual *"
-              value={formData.selling_price}
-              onChangeText={(text) => onFormChange("selling_price", text)}
-              keyboardType="numeric"
-              variant="filled"
-            />
-          </View>
-        </View>
-
-        <Button
-          title="Tambah Item"
-          onPress={handleSubmit}
-          variant="primary"
-          size="large"
-          style={styles.submitButton}
-          icon="plus-circle"
-        />
+        </KeyboardAvoidingView>
       </View>
-    </View>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  formContainer: {
-    backgroundColor: "white",
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 20,
-    borderRadius: 20,
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
   },
-  formHeader: {
+  keyboardAvoidingView: {
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContainer: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    width: "100%",
+    maxWidth: 500,
+    minHeight: 300,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    overflow: "hidden",
+  },
+  modalHeader: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    backgroundColor: "#F9FAFB",
   },
-  formTitleContainer: {
+  titleContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
-  formTitle: {
+  modalTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#1E293B",
+    color: "#111827",
   },
   closeButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: "#F3F4F6",
+    padding: 4,
   },
-  formContent: {
+  scrollView: {
+    maxHeight: "100%",
+  },
+  modalBody: {
     padding: 20,
+    paddingBottom: 30,
   },
-  input: {
+  formGroup: {
     marginBottom: 16,
+  },
+  label: {
+    fontWeight: "600",
+    marginBottom: 6,
+    fontSize: 14,
+    color: "#374151",
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: "top",
   },
   priceRow: {
     flexDirection: "row",
     gap: 12,
     marginBottom: 24,
   },
-  priceInput: {
+  priceGroup: {
     flex: 1,
   },
   submitButton: {
-    marginBottom: 12,
+    height: 48,
+    backgroundColor: "#3B82F6",
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
   },
-  noteText: {
-    fontSize: 12,
-    color: "#6B7280",
-    textAlign: "center",
-    fontStyle: "italic",
+  submitButtonDisabled: {
+    backgroundColor: "#93C5FD",
+  },
+  submitButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 16,
   },
 });

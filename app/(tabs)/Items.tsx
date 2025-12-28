@@ -1,21 +1,19 @@
 // app/items/index.tsx
-import React, { useCallback, useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  View,
-} from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import React, { useCallback, useMemo, useState } from "react";
+import { Alert, StyleSheet, View } from "react-native";
 import { EditItemModal } from "../../components/items/editItemModel";
-import { ItemFormSection } from "../../components/items/itemFormSection";
+import { AddItemModal } from "../../components/items/itemFormSection";
 import { ItemList } from "../../components/items/itemList";
+import { SearchBar } from "../../components/items/searchBar";
 import { AccessWarning } from "../../components/shared/accessWarning";
 import { EmptyState } from "../../components/shared/empetyState";
 import { FloatingButton } from "../../components/shared/floatingButton";
 import { Loading } from "../../components/shared/loading";
+import { Text } from "../../components/shared/text";
 import { useItems } from "../../hook/items/useitem";
 import { Item, ItemFormData } from "../../type/item";
+import { getSearchPlaceholder } from "../../utils/items/searchUtil";
 
 export default function ItemPage() {
   const {
@@ -30,20 +28,22 @@ export default function ItemPage() {
 
   const isAdmin = user?.role === "admin";
   const [refreshing, setRefreshing] = useState(false);
-  const [isFormVisible, setIsFormVisible] = useState(false);
+  const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
-  const [formData, setFormData] = useState<ItemFormData>({
-    item_name: "",
-    description: "",
-    stock: "",
-    purchase_price: "",
-    selling_price: "",
-  });
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Debug: Cek apakah user admin
-  console.log("User Role:", user?.role);
-  console.log("Is Admin:", isAdmin);
-  console.log("User Data:", user);
+  // Filter items berdasarkan pencarian
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+
+    const query = searchQuery.toLowerCase().trim();
+    return items.filter(
+      (item) =>
+        item.item_name.toLowerCase().includes(query) ||
+        item.description?.toLowerCase().includes(query) ||
+        (item.category && item.category.toLowerCase().includes(query))
+    );
+  }, [items, searchQuery]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -51,32 +51,35 @@ export default function ItemPage() {
     setRefreshing(false);
   }, [fetchItems]);
 
-  const handleFormChange = (key: keyof ItemFormData, value: string) => {
-    setFormData((prev) => ({ ...prev, [key]: value }));
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
   };
 
-  const handleSubmit = async () => {
+  const handleSubmitNewItem = async (formData: ItemFormData) => {
     try {
+      // Validasi form
+      if (!formData.item_name.trim()) {
+        Alert.alert("Error", "Nama item harus diisi");
+        return;
+      }
+      if (!formData.selling_price || Number(formData.selling_price) <= 0) {
+        Alert.alert("Error", "Harga jual harus diisi dan lebih dari 0");
+        return;
+      }
+
       await handleCreateItem({
         item_name: formData.item_name,
         description: formData.description,
         stock: Number(formData.stock || 0),
-        purchase_price: Number(formData.purchase_price),
+        purchase_price: Number(formData.purchase_price) || 0,
         selling_price: Number(formData.selling_price),
       });
 
-      setFormData({
-        item_name: "",
-        description: "",
-        stock: "",
-        purchase_price: "",
-        selling_price: "",
-      });
-
-      setIsFormVisible(false);
       Alert.alert("Berhasil", "Item berhasil ditambahkan!");
+      setIsAddModalVisible(false);
     } catch (error: any) {
       Alert.alert("Gagal", error.message || "Terjadi kesalahan");
+      throw error;
     }
   };
 
@@ -130,52 +133,80 @@ export default function ItemPage() {
     return <Loading message="Memuat data..." />;
   }
 
-  return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
-    >
-      <View style={styles.content}>
-        <AccessWarning isAdmin={isAdmin} />
+  // Buat komponen header sebagai ReactElement
+  const HeaderComponent = (
+    <View style={styles.headerContainer}>
+      <AccessWarning isAdmin={isAdmin} />
+      <SearchBar
+        onSearch={handleSearch}
+        placeholder={getSearchPlaceholder(items)}
+        initialValue={searchQuery}
+      />
+    </View>
+  );
 
-        <ItemFormSection
-          isVisible={isFormVisible}
-          formData={formData}
-          onClose={() => setIsFormVisible(false)}
-          onFormChange={handleFormChange}
-          onSubmit={handleSubmit}
-        />
-
-        {items.length === 0 ? (
+  // Buat komponen empty state sebagai ReactElement
+  const EmptyStateComponent = () => {
+    if (items.length === 0) {
+      return (
+        <View style={styles.emptyStateContainer}>
           <EmptyState isAdmin={isAdmin} />
-        ) : (
-          <ItemList
-            items={items}
-            isAdmin={isAdmin}
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            onEditItem={handleEdit}
-            onDeleteItem={handleDelete}
+        </View>
+      );
+    }
+
+    if (filteredItems.length === 0 && searchQuery) {
+      return (
+        <View style={styles.noResultsContainer}>
+          <MaterialCommunityIcons
+            name="text-search"
+            size={64}
+            color="#CBD5E1"
           />
-        )}
+          <Text style={styles.noResultsTitle}>Tidak ada item yang cocok</Text>
+          <Text style={styles.noResultsText}>
+            Tidak ditemukan item dengan kata kunci "{searchQuery}"
+          </Text>
+        </View>
+      );
+    }
 
-        <EditItemModal
-          visible={!!editItem}
-          item={editItem}
-          onClose={() => setEditItem(null)}
-          onSave={handleSaveEdit}
-        />
-      </View>
+    return <></>;
+  };
 
-      {/* Floating Button - harus di luar View utama agar position: absolute berfungsi */}
+  return (
+    <View style={styles.container}>
+      <ItemList
+        items={filteredItems}
+        isAdmin={isAdmin}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
+        onEditItem={handleEdit}
+        onDeleteItem={handleDelete}
+        ListHeaderComponent={HeaderComponent}
+        ListEmptyComponent={EmptyStateComponent()}
+      />
+
+      <EditItemModal
+        visible={!!editItem}
+        item={editItem}
+        onClose={() => setEditItem(null)}
+        onSave={handleSaveEdit}
+      />
+
+      <AddItemModal
+        visible={isAddModalVisible}
+        onClose={() => setIsAddModalVisible(false)}
+        onSubmit={handleSubmitNewItem}
+      />
+
       {isAdmin && (
         <FloatingButton
-          isVisible={isFormVisible}
-          onPress={() => setIsFormVisible(!isFormVisible)}
+          isVisible={isAddModalVisible}
+          onPress={() => setIsAddModalVisible(!isAddModalVisible)}
         />
       )}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -184,7 +215,33 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
-  content: {
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  emptyStateContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+  },
+  noResultsContainer: {
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
+    paddingTop: 80,
+  },
+  noResultsTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#475569",
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  noResultsText: {
+    fontSize: 14,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 20,
   },
 });

@@ -1,10 +1,9 @@
-// app/items/components/ItemList.tsx
-import React from "react";
+// components/items/itemList.tsx
+import React, { ReactElement } from "react";
 import {
   FlatList,
   RefreshControl,
   StyleSheet,
-  Text,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -18,6 +17,8 @@ interface ItemListProps {
   onRefresh: () => void;
   onEditItem: (item: Item) => void;
   onDeleteItem: (item: Item) => void;
+  ListHeaderComponent?: ReactElement;
+  ListEmptyComponent?: ReactElement;
 }
 
 export const ItemList: React.FC<ItemListProps> = ({
@@ -27,19 +28,42 @@ export const ItemList: React.FC<ItemListProps> = ({
   onRefresh,
   onEditItem,
   onDeleteItem,
+  ListHeaderComponent,
+  ListEmptyComponent,
 }) => {
   const { width } = useWindowDimensions();
 
+  // Optimasi jumlah kolom - lebih responsif
   const numColumns =
-    width >= 1200 ? 4 : width >= 900 ? 3 : width >= 600 ? 2 : 1;
+    width >= 1400
+      ? 5
+      : width >= 1100
+      ? 4
+      : width >= 768
+      ? 3
+      : width >= 480
+      ? 2
+      : 1;
+
+  const renderItem = ({ item }: { item: Item }) => (
+    <View
+      style={[styles.cardWrapper, numColumns > 1 && styles.cardWrapperMulti]}
+    >
+      <ItemCard
+        item={item}
+        onEdit={() => onEditItem(item)}
+        onDelete={() => onDeleteItem(item)}
+        isAdmin={isAdmin}
+        compactMode={numColumns > 1}
+      />
+    </View>
+  );
 
   return (
     <View style={styles.listContainer}>
-      <Text style={styles.listHeader}>{items.length} item ditemukan</Text>
-
       <FlatList
         data={items}
-        key={numColumns} // penting agar re-render saat kolom berubah
+        key={`${numColumns}-${width}`}
         numColumns={numColumns}
         keyExtractor={(item) => String(item.item_id)}
         contentContainerStyle={styles.listContent}
@@ -52,19 +76,21 @@ export const ItemList: React.FC<ItemListProps> = ({
             tintColor="#3B82F6"
           />
         }
-        renderItem={({ item }) => (
-          <View style={styles.cardWrapper}>
-            <ItemCard
-              item={item}
-              onEdit={() => onEditItem(item)}
-              onDelete={() => onDeleteItem(item)}
-              isAdmin={isAdmin}
-            />
-          </View>
-        )}
+        renderItem={renderItem}
         ItemSeparatorComponent={() =>
           numColumns === 1 ? <View style={styles.separator} /> : null
         }
+        ListHeaderComponent={ListHeaderComponent}
+        ListEmptyComponent={ListEmptyComponent}
+        // Pengaturan keyboard CRITICAL untuk pencarian
+        keyboardShouldPersistTaps="always" // Ubah dari "handled" ke "always"
+        keyboardDismissMode="on-drag" // Keyboard hilang saat scroll
+        showsVerticalScrollIndicator={true}
+        // Optimasi performance
+        initialNumToRender={10}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        removeClippedSubviews={false} // Ubah ke false untuk masalah keyboard
       />
     </View>
   );
@@ -73,29 +99,24 @@ export const ItemList: React.FC<ItemListProps> = ({
 const styles = StyleSheet.create({
   listContainer: {
     flex: 1,
-    marginTop: 8,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 120,
-  },
-  listHeader: {
-    fontSize: 14,
-    color: "#64748B",
-    marginBottom: 12,
-    textAlign: "center",
-    fontWeight: "500",
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
+    paddingBottom: 100,
+    paddingTop: 8,
   },
   separator: {
-    height: 12,
+    height: 6,
   },
   row: {
     justifyContent: "space-between",
+    gap: 8,
   },
   cardWrapper: {
     flex: 1,
-    marginBottom: 16,
-    marginHorizontal: 6,
+  },
+  cardWrapperMulti: {
+    marginHorizontal: 4,
+    marginBottom: 8,
   },
 });

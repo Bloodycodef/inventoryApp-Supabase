@@ -1,9 +1,9 @@
 // app/home/components/StatsSection.tsx
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { StatCard } from "../../components/Homepage/statcard";
 import { formatRupiah } from "../../helper/formatRupiah";
 import { Stats } from "../../type/database";
+import { StatCard } from "./statcard";
 
 interface StatsSectionProps {
   stats: Stats;
