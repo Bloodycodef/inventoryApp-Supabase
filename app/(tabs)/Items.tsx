@@ -133,7 +133,6 @@ export default function ItemPage() {
     return <Loading message="Memuat data..." />;
   }
 
-  // Buat komponen header sebagai ReactElement
   const HeaderComponent = (
     <View style={styles.headerContainer}>
       <AccessWarning isAdmin={isAdmin} />
@@ -145,7 +144,6 @@ export default function ItemPage() {
     </View>
   );
 
-  // Buat komponen empty state sebagai ReactElement
   const EmptyStateComponent = () => {
     if (items.length === 0) {
       return (
@@ -170,7 +168,6 @@ export default function ItemPage() {
         </View>
       );
     }
-
     return <></>;
   };
 

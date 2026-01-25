@@ -71,6 +71,12 @@ export const ItemCard: React.FC<ItemCardProps> = ({
           </Text>
         </View>
       </View>
+      {/* DESKRIPSI */}
+      {item.description ? (
+        <Text style={styles.description} numberOfLines={compactMode ? 1 : 2}>
+          {item.description}
+        </Text>
+      ) : null}
       {/* HARGA: Beli dan Jual dalam satu baris */}
       <View style={[styles.pricesRow, compactMode && styles.pricesRowCompact]}>
         {/* Harga Beli */}

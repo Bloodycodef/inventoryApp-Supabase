@@ -67,14 +67,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
-          // Penting untuk iOS agar keyboard tidak hilang
-          keyboardShouldPersistTaps="handled"
-          // Penting untuk Android
           blurOnSubmit={false}
-          // Pengaturan spesifik platform
           {...Platform.select({
             ios: {
-              clearButtonMode: "never", // Nonaktifkan clear button bawaan iOS
+              clearButtonMode: "never",
             },
           })}
         />
